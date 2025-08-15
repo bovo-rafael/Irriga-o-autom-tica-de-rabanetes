@@ -1,0 +1,19 @@
+const int PINO_SENSOR_1 = A0;
+const int PINO_SENSOR_2 = A1;
+
+void setup() {
+  Serial.begin(9600);
+  Serial.println("--- Calibracao de Sensores ---");
+}
+
+void loop() {
+  int valorSensor1 = analogRead(PINO_SENSOR_1);
+  int valorSensor2 = analogRead(PINO_SENSOR_2);
+
+  Serial.print("Sensor 1: ");
+  Serial.print(valorSensor1);
+  Serial.print(" | Sensor 2: ");
+  Serial.println(valorSensor2);
+
+  delay(1000);
+}
