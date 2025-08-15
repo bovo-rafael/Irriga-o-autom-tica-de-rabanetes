@@ -1,0 +1,124 @@
+#include <SPI.h>
+#include <SD.h>
+
+const int PINO_SENSOR_VASO_1 = A0;
+const int PINO_SENSOR_VASO_2 = A1;
+const int PINO_RELE_BOMBA_1 = 8;
+const int PINO_RELE_BOMBA_2 = 9;
+const int PINO_CS_SD = 4;
+
+const int LIMIAR_SECURA_VASO_1 = 750;
+const int LIMIAR_SECURA_VASO_2 = 780;
+const unsigned long DURACAO_IRRIGACAO_MS = 800;
+const unsigned long INTERVALO_MINIMO_IRRIGACAO_MS = 6 * 60 * 60 * 1000UL;
+
+const char* NOME_ARQUIVO_LOG = "datalog.csv";
+
+unsigned long tempoUltimaIrrigacaoVaso1 = 0;
+unsigned long tempoUltimaIrrigacaoVaso2 = 0;
+
+void setup() {
+  Serial.begin(9600);
+  while (!Serial);
+
+  pinMode(PINO_RELE_BOMBA_1, OUTPUT);
+  pinMode(PINO_RELE_BOMBA_2, OUTPUT);
+  digitalWrite(PINO_RELE_BOMBA_1, HIGH);
+  digitalWrite(PINO_RELE_BOMBA_2, HIGH);
+
+  Serial.print("Inicializando cartao SD...");
+  if (!SD.begin(PINO_CS_SD)) {
+    Serial.println(" falhou!");
+    while (1);
+  }
+  Serial.println(" OK.");
+
+  if (!SD.exists(NOME_ARQUIVO_LOG)) {
+    Serial.println("Criando arquivo de log...");
+    File arquivoLog = SD.open(NOME_ARQUIVO_LOG, FILE_WRITE);
+    if (arquivoLog) {
+      arquivoLog.println("Uptime_ms,ID_Vaso,Umidade_Lida,Duracao_Irrigacao_ms");
+      arquivoLog.close();
+      Serial.println("Arquivo criado.");
+    } else {
+      Serial.println("Erro ao criar arquivo.");
+    }
+  } else {
+    Serial.println("Arquivo de log encontrado.");
+  }
+}
+
+void loop() {
+  verificarVaso1();
+  verificarVaso2();
+  delay(1000); 
+}
+
+void verificarVaso1() {
+  unsigned long tempoAtual = millis();
+  int umidadeAtual = analogRead(PINO_SENSOR_VASO_1);
+  Serial.print("Vaso 1 - Umidade: ");
+  Serial.println(umidadeAtual);
+
+  bool tempoMinimoAtingido = (tempoAtual - tempoUltimaIrrigacaoVaso1 >= INTERVALO_MINIMO_IRRIGACAO_MS);
+  bool nuncaIrrigou = (tempoUltimaIrrigacaoVaso1 == 0);
+
+  if (tempoMinimoAtingido || nuncaIrrigou) {
+    if (umidadeAtual > LIMIAR_SECURA_VASO_1) {
+      executarIrrigacao(1, PINO_RELE_BOMBA_1, umidadeAtual);
+      tempoUltimaIrrigacaoVaso1 = millis();
+    } else {
+      registrarLogNoSD(1, umidadeAtual, 0);
+    }
+  } else {
+    registrarLogNoSD(1, umidadeAtual, 0);
+  }
+}
+
+void verificarVaso2() {
+  unsigned long tempoAtual = millis();
+  int umidadeAtual = analogRead(PINO_SENSOR_VASO_2);
+  Serial.print("Vaso 2 - Umidade: ");
+  Serial.println(umidadeAtual);
+
+  bool tempoMinimoAtingido = (tempoAtual - tempoUltimaIrrigacaoVaso2 >= INTERVALO_MINIMO_IRRIGACAO_MS);
+  bool nuncaIrrigou = (tempoUltimaIrrigacaoVaso2 == 0);
+
+  if (tempoMinimoAtingido || nuncaIrrigou) {
+    if (umidadeAtual > LIMIAR_SECURA_VASO_2) {
+      executarIrrigacao(2, PINO_RELE_BOMBA_2, umidadeAtual);
+      tempoUltimaIrrigacaoVaso2 = millis();
+    } else {
+      registrarLogNoSD(2, umidadeAtual, 0);
+    }
+  } else {
+    registrarLogNoSD(2, umidadeAtual, 0);
+  }
+}
+
+void executarIrrigacao(int idVaso, int pinoRele, int umidadeDoDisparo) {
+  Serial.print("Iniciando irrigacao para o Vaso ");
+  Serial.println(idVaso);
+
+  digitalWrite(pinoRele, LOW);
+  registrarLogNoSD(idVaso, umidadeDoDisparo, DURACAO_IRRIGACAO_MS);
+  delay(DURACAO_IRRIGACAO_MS);
+  digitalWrite(pinoRele, HIGH);
+
+  Serial.print("Irrigacao para o Vaso ");
+  Serial.print(idVaso);
+  Serial.println(" concluida.");
+}
+
+void registrarLogNoSD(int idVaso, int umidade, unsigned long duracao) {
+  File arquivoLog = SD.open(NOME_ARQUIVO_LOG, FILE_WRITE);
+  if (arquivoLog) {
+    String linhaDeDados = String(millis()) + "," + String(idVaso) + "," + String(umidade) + "," + String(duracao);
+    arquivoLog.println(linhaDeDados);
+    arquivoLog.close();
+    Serial.print("Log registrado: ");
+    Serial.println(linhaDeDados);
+  } else {
+    Serial.println("Erro ao abrir o arquivo de log para escrita!");
+  }
+}
